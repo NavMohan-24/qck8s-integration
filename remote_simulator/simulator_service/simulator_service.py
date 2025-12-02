@@ -60,13 +60,13 @@ def execute():
 
         print(f"Received {len(circuits)} circuit(s) for execution with {shots} shots")
         
-        # transpile
-        print("Transpiling circuits...")
-        tqc = transpile(circuits, simulator)
+        # # transpile
+        # print("Transpiling circuits...")
+        # tqc = transpile(circuits, simulator)
         
         # run and retrieve a job
         print(f"Running simulation with {shots} shots...")
-        job = sampler.run(pubs=tqc, shots=shots)
+        job = sampler.run(pubs=circuits, shots=shots)
         result = job.result()
 
         # Serialize result using RuntimeEncoder, then base64 encode
