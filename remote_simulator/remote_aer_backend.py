@@ -30,21 +30,20 @@ class RemoteAerJob(Job):
 
 class RemoteAerBackend(BackendV2):
 
-    def __init__(self, simulator_url = None):
+    def __init__(self, name): 
         super().__init__(
             provider=None,
-            name= "RemoteAerSimulator",
             description= "AerSimulator Implementation in k8s pod"
         )
-
+        self.backend_name = name
         self._target = AerSimulator().target
 
-        self.simulator_url = simulator_url or os.getenv(
-            'SIMULATOR_SERVICE_URL', 
-            'http://aer-simulator-service:5001'
+        self.transpiler_url = os.getenv(
+            'TRANSPILER_SERVICE_URL', 
+            'http://transpiler-service:5002'  
         )
         
-        print(f"Remote AerBackend configured with URL: {self.simulator_url}")
+        print(f"Remote AerBackend configured with URL: {self.transpiler_url}")
 
     
     @classmethod
@@ -70,14 +69,15 @@ class RemoteAerBackend(BackendV2):
             circuit_bytes = fptr.getvalue()
             circuits_b64 = base64.b64encode(circuit_bytes).decode('utf-8')
 
-        # Send to remote simulator
+        # Send to transpiler
         try:
             response = requests.post(
-                f"{self.simulator_url}/execute",
+                f"{self.transpiler_url}/transpile",
                 
                 json={
                     'circuits_qpy': circuits_b64,
-                    'shots' : shots
+                    'shots' : shots,
+                    'backend_name' : self.backend_name,
                     },
                 
                 timeout = 300                     
@@ -107,39 +107,8 @@ class RemoteAerBackend(BackendV2):
     @property
     def target(self):
         return self._target
+
     
     @property
     def max_circuits(self):
         return None
-
-        
-        
-
-            
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-    
