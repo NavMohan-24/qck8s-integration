@@ -8,6 +8,7 @@ from flask import Flask, request, Response, jsonify
 from qiskit import QuantumCircuit, generate_preset_pass_manager,qpy
 from qiskit_ibm_runtime.utils import RuntimeEncoder, RuntimeDecoder
 from qiskit_ibm_runtime import QiskitRuntimeService
+from qiskit_aer import AerSimulator
 
 
 app = Flask(__name__)
@@ -19,47 +20,73 @@ simulator_url = os.getenv('SIMULATOR_SERVICE_URL',
 IBM_API_KEY = os.getenv('IBM_API_KEY')
 IBM_INSTANCE = os.getenv('IBM_INSTANCE')  
 
+def init_ibm_service():
+    global service
+    try:
+        if IBM_API_KEY:
+            print("Initializing IBM Quantum service...")
+            service = QiskitRuntimeService(
+                channel="ibm_quantum_platform",
+                token=IBM_API_KEY,
+                instance=IBM_INSTANCE
+            )
+            print("✅ IBM service initialized")
+        else:
+            print("⚠️ No IBM API key - using AerSimulator only")
+    except Exception as e:
+        print(f"❌ Failed to init IBM service: {e}")
+        service = None
+
+# Initialize on startup
+init_ibm_service()
+
 print("Initializing Transpiler Service ...")
+
 
 @app.route("/health")
 def health():
-    return jsonify({"status" : "healthy", "service" : "transpiler"})
+    return jsonify({
+        "status": "healthy",
+        "service": "transpiler",
+        "ibm_available": service is not None
+    })
 
 @app.route("/transpile", methods=["POST"])
 def transpile():
 
-    data = request.get_json()
-    # decode the circuit
-    circuits_b64 = data.get('circuits_qpy')
-    shots = data.get("shots", 1024)
-    backend_name = data.get("backend", "ibm_torino")
+    try:
+        data = request.get_json()
 
-    if not circuits_b64:
-        return jsonify({"error": "No circuits provided"}), 400
-    
-    # deserialize circuits
-    circuits_bytes = base64.b64decode(circuits_b64)
-    with io.BytesIO(circuits_bytes) as fptr:
-        circuits = qpy.load(fptr)
+        # decode the circuit
+        circuits_b64 = data.get('circuits_qpy')
+        shots = data.get("shots", 1024)
+        backend_name = data.get("backend_name", "aer-simulator")
 
-    # initialize backend target
-    service = QiskitRuntimeService(
-        channel="ibm_quantum_platform",
-        token = IBM_API_KEY,
-        instance= IBM_INSTANCE)
-    target = service.backend(name = backend_name).target
 
-    # transpile circuit
-    pm = generate_preset_pass_manager(optimization_level=3, target=target)
-    isa_circuits = pm.run(circuits)
+        if not circuits_b64:
+            return jsonify({"Transpiler error": "No circuits provided"}), 400
+        
 
-    # serialize the circuit
-    with io.BytesIO() as fptr:
-        qpy.dump(isa_circuits, fptr)
-        isa_circuit_bytes = fptr.getvalue()
-        isa_circuit_b64 = base64.b64encode(isa_circuit_bytes).decode("utf-8")
+        # deserialize circuits
+        circuits_bytes = base64.b64decode(circuits_b64)
+        with io.BytesIO(circuits_bytes) as fptr:
+            circuits = qpy.load(fptr)
 
-    try: 
+        
+        if backend_name == "aer-simulator" or not service:
+            target = AerSimulator.target    
+        else:
+            target = service.backend(name=backend_name).target
+        
+        pm = generate_preset_pass_manager(optimization_level=3, target=target)
+        isa_circuits = pm.run(circuits)
+
+        # serialize the circuit
+        with io.BytesIO() as fptr:
+            qpy.dump(isa_circuits, fptr)
+            isa_circuit_bytes = fptr.getvalue()
+            isa_circuit_b64 = base64.b64encode(isa_circuit_bytes).decode("utf-8")
+
         response = requests.post(
             f"{simulator_url}/execute",
             json = {
@@ -74,7 +101,7 @@ def transpile():
             return jsonify(response.json())
         
         else:
-            return jsonify({"error": f"Simulator failed: {response.text}"}), 500
+            return jsonify({"Simulator error": f"Simulation failed: {response.text}"}), 500
         
     except Exception as e:
         import traceback

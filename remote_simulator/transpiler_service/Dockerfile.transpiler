@@ -2,11 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY transpiler/requirements.txt /app/
+COPY transpiler_service/requirements.txt requirements.txt
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY transpiler/transpiler_service.py /app/
+COPY transpiler_service/transpiler_service.py transpiler_service.py 
 
 EXPOSE 5002
 
