@@ -47,7 +47,11 @@ init_ibm_service()
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy", "service" : "aer-simulator"})
+    return jsonify({
+        "status": "healthy",
+        "service": "simulator",
+        "ibm_available": service is not None
+    })
 
 @app.route("/execute", methods=['POST']) # only accepts POST method.
 def execute():
