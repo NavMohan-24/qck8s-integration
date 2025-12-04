@@ -8,13 +8,13 @@ I chose the name of KIND cluster as `qc-cluster`.
 ***Create docker-images for pods***
 ```shell
 # worker pod
-docker build -t worker/Dockerfile.worker -f qiskit-worker:v2 .
+docker build -f worker/Dockerfile.worker -t qiskit-worker:v2 .
 
 # simulator pod + service
 docker build -f simulator_service/Dockerfile.simulator -t aer-simulator:v2 .
 
 # transpiler pod
-docker build -t transpiler_service/Dockerfile.transpiler -f transpiler:v2 .
+docker build -f transpiler_service/Dockerfile.transpiler -t transpiler:v2 .
 ```
 
 ***Load docker-images to pods***
@@ -30,8 +30,11 @@ kind load docker-image transpiler:v2 --name qc-cluster
 
 ```
 
-***Deploy PODS and Services***
+***Deploy PODS, Secrets & Services***
 ```shell
+# secrets
+kubectl apply -f k8s/ibm-quantum-secret.yaml
+
 # worker pod
 kubectl apply -f k8s/worker-pod.yaml   
 
