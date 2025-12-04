@@ -9,7 +9,7 @@ spec:
   containers:
   - name: worker
     image: qiskit-worker:v2
-    imagePullPolicy: Never  # Important for local Minikube images
+    imagePullPolicy: Never  
     env:
     - name: TRANSPILER_SERVICE_URL
       value: "http://transpiler-service:5002"
@@ -24,12 +24,11 @@ spec:
       limits:
         memory: "1Gi"
         cpu: "1000m"
-    # Optional: Add liveness probe
-    livenessProbe:
-      exec:
-        command:
-        - sh
-        - -c
-        - "ps aux | grep -v grep | grep 'tail -f' || exit 1"
-      initialDelaySeconds: 10
-      periodSeconds: 30
+    # livenessProbe:
+    #   exec:
+    #     command:
+    #     - sh
+    #     - -c
+    #     - "ps aux | grep -v grep | grep 'tail -f' || exit 1"
+    #   initialDelaySeconds: 10
+    #   periodSeconds: 30
