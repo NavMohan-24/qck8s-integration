@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,21 +37,55 @@ type QuantumAerJobReconciler struct {
 // +kubebuilder:rbac:groups=aerjob.nav.io,resources=quantumaerjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=aerjob.nav.io,resources=quantumaerjobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=aerjob.nav.io,resources=quantumaerjobs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;delete
+// +kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the QuantumAerJob object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *QuantumAerJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	job := &aerjobv2.QuantumAerJob{}
 
+	// Fetch job using Name.
+	if err := r.Get(ctx,req.NamespacedName,job); err != nil{
+		log.Info("Job is deleted since last reconcile")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	log.Info("Reconciling Job", "name", job.Name, "phase", job.Status.JobStatus)
+	
+	// handle timeout of job
+	if job.Status.StartTime != nil && job.Spec.Timeout > 0 {
+
+		elapsed := time.Since(job.Status.StartTime.Time)
+		timeout := time.Duration(job.Spec.Timeout)*time.Second
+
+		if elapsed > timeout && job.Status.JobStatus != aerjobv2.Completed && 
+			job.Status.JobStatus != aerjobv2.Failed {
+				log.Info("Job timeout exceeded", "elapsed", elapsed, "timeout", timeout)
+				return r.handleTimeout(ctx, job)
+		}
+	}
+
+	switch job.Status.JobStatus{
+
+		case "":
+			return r.handleNewJob(ctx, job)
+		
+		case aerjobv2.Pending:
+			return r.handlePendingJob(ctx,job)
+		
+		case aerjobv2.Progress:
+			return r.handleRunningJob(ctx, job)
+		
+		case aerjobv2.Completed:
+			return r.handleCompletedJob(ctx, job)
+		
+		case aerjobv2.Failed:
+			return r.handleFailedJob(ctx, job)
+			
+	}
 	return ctrl.Result{}, nil
 }
 
