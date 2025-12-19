@@ -180,7 +180,24 @@ func (r* QuantumAerJobReconciler) getForPod(ctx context.Context, job *aerjobv2.Q
 
 	return nil, errors.NewNotFound(v1.Resource("pod"), "")
 }
-	
+
+func (r* QuantumAerJobReconciler) handleNewJob(ctx context.Context, job *aerjobv2.QuantumAerJob)(ctrl.Result, error){
+
+	log := logf.FromContext(ctx)
+	log.Info("Handling a new job", "job name", job.Name)
+
+	job.Status.JobStatus = aerjobv2.Pending
+	now := metav1.Now()
+	job.Status.StartTime = &now
+	job.Status.Retries = 0 // initialize retries
+
+	if err := r.Status().Update(ctx,job); err != nil{
+		return ctrl.Result{}, err
+	}
+	log.Info("Set job status to Pending")
+	return ctrl.Result{Requeue: true}, nil
+}
+
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *QuantumAerJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
