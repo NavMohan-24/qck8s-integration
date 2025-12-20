@@ -72,7 +72,17 @@ func (r *QuantumAerJobReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if elapsed > timeout && job.Status.JobStatus != aerjobv2.Completed && 
 			job.Status.JobStatus != aerjobv2.Failed {
 				log.Info("Job timeout exceeded", "elapsed", elapsed, "timeout", timeout)
-				return r.handleTimeout(ctx, job)
+				// Mark as failed
+				job.Status.JobStatus = aerjobv2.Failed
+				job.Status.ErrorMessage = fmt.Sprintf("Job exceeded timeout of %d seconds", job.Spec.Timeout)
+				now := metav1.Now()
+				job.Status.CompletionTime = &now
+
+				if err := r.Status().Update(ctx, job); err != nil {
+					return ctrl.Result{}, err
+				}
+				// Let handleTerminalJob clean up
+				return ctrl.Result{Requeue: true}, nil	
 		}
 	}
 
@@ -87,11 +97,8 @@ func (r *QuantumAerJobReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		case aerjobv2.Progress:
 			return r.handleRunningJob(ctx, job)
 		
-		case aerjobv2.Completed:
-			return r.handleCompletedJob(ctx, job)
-		
-		case aerjobv2.Failed:
-			return r.handleFailedJob(ctx, job)
+		case aerjobv2.Completed, aerjobv2.Failed:
+			return r.handleTerminalJob(ctx, job)
 			
 	}
 	return ctrl.Result{}, nil
