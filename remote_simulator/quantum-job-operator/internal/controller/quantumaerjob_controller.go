@@ -270,6 +270,7 @@ func (r* QuantumAerJobReconciler) handleRunningJob(ctx context.Context, job *aer
 			} else {
 				log.Info("Max retries exceeded, marking job as Failed")
 				job.Status.JobStatus = aerjobv2.Failed
+				job.Status.ErrorMessage = fmt.Sprintf("Job terminated due to consistend Pod failures")
 				now := metav1.Now()
 				job.Status.CompletionTime = &now
 				if err := r.Status().Update(ctx,job); err != nil{
@@ -282,7 +283,7 @@ func (r* QuantumAerJobReconciler) handleRunningJob(ctx context.Context, job *aer
 			now := metav1.Now()
 			job.Status.CompletionTime = &now
 			log.Info("Pod suceeded,marking job as Completed")
-			job.Status.JobStatus = aerjobv2.Failed
+			job.Status.JobStatus = aerjobv2.Completed
 
 			if err := r.Status().Update(ctx,job); err != nil{
 					return ctrl.Result{}, err
@@ -364,10 +365,12 @@ func (r *QuantumAerJobReconciler) handleTerminalJob(ctx context.Context, job *ae
 }
 
 
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *QuantumAerJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&aerjobv2.QuantumAerJob{}).
+		Owns(&v1.Pod{}).
 		Named("quantumaerjob").
 		Complete(r)
 }

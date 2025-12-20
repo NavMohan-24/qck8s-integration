@@ -52,6 +52,10 @@ spec:
           spec:
             description: spec defines the desired state of QuantumAerJob
             properties:
+              backendName:
+                default: aer-simulator
+                description: BackendName is the Qiskit Aer backend to use
+                type: string
               circuits:
                 description: |-
                   Circuits is a string representation of the quantum circuits to execute.
@@ -108,6 +112,13 @@ spec:
               timeout:
                 default: 600
                 description: Timeout for the simulation job in seconds
+                format: int32
+                type: integer
+              ttlSecondsAfterFinished:
+                default: 300
+                description: |-
+                  TTLSecondsAfterFinished limits the lifetime of a Job that has finished
+                  execution (either Completed or Failed).
                 format: int32
                 type: integer
             required:

@@ -25,6 +25,11 @@ import (
 
 // QuantumAerJobSpec defines the desired state of QuantumAerJob
 type QuantumAerJobSpec struct {
+	
+	// BackendName is the Qiskit Aer backend to use
+	// +optional
+	// +kubebuilder:default:=aer-simulator
+	BackendName string `json:"backendName,omitempty"`
 
 	// Shots is the number of times to run the circuit.
 	// +optional
@@ -54,6 +59,12 @@ type QuantumAerJobSpec struct {
 	// +optional
 	// +kubebuilder:default:=600
 	Timeout int32 `json:"timeout,omitempty"`
+	
+	// TTLSecondsAfterFinished limits the lifetime of a Job that has finished
+	// execution (either Completed or Failed).
+	// +optional
+	// +kubebuilder:default:=300
+	TTLSecondsAfterFinished *int32 `json:"ttlSecondsAfterFinished,omitempty"`
 
 	// Resources defines the compute resources required for the simulator pod
 	// +optional
