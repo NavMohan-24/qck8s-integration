@@ -36,6 +36,13 @@ import (
 	aerjobv2 "quantum/Aerjob/api/v2"
 )
 
+// Requeue delay constants for reconciliation backoff
+const (
+    FastRequeueDelay    = 5 * time.Second // for polling state change
+    DefaultRequeueDelay = 10 * time.Second // for handling errors
+    SlowRequeueDelay    = 60 * time.Second // clean-up
+)
+
 // QuantumAerJobReconciler reconciles a QuantumAerJob object
 type QuantumAerJobReconciler struct {
 	client.Client
@@ -228,7 +235,7 @@ func (r* QuantumAerJobReconciler) handleNewJob(ctx context.Context, job *aerjobv
 	job.Status.Retries = 0 // initialize retries
 
 	if err := r.Status().Update(ctx,job); err != nil{
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 	}
 	log.Info("Set job status to Pending")
 	return ctrl.Result{Requeue: true}, nil
@@ -244,14 +251,14 @@ func (r* QuantumAerJobReconciler) handlePendingJob(ctx context.Context, job *aer
 	// if pod is not found create the pod
 	if err != nil && errors.IsNotFound(err){
 		if err2 := r.createSimulatorPod(ctx,job); err2 != nil{
-			return ctrl.Result{},err2
+			return ctrl.Result{RequeueAfter: DefaultRequeueDelay},err2
 		}
 		return ctrl.Result{Requeue:true}, nil
 	}
 	// set the job status as In progress
 	job.Status.JobStatus = aerjobv2.Progress
 	if err := r.Status().Update(ctx, job); err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 	}
 
 	log.Info("Pod exists, transitioning to Progress")
@@ -267,7 +274,7 @@ func (r* QuantumAerJobReconciler) handleRunningJob(ctx context.Context, job *aer
 		job.Status.JobStatus = aerjobv2.Pending
 		job.Status.PodName = "" // Clear pod name
 		if err := r.Status().Update(ctx, job); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 		}
 		log.Info("Transitioning back to Pending")
 		return ctrl.Result{Requeue: true}, nil
@@ -286,16 +293,16 @@ func (r* QuantumAerJobReconciler) handleRunningJob(ctx context.Context, job *aer
 
 				// Delete failed pod
 				if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
-					return ctrl.Result{}, err
+					return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 				}
 
 				job.Status.Retries++
 				job.Status.JobStatus = aerjobv2.Pending
 				job.Status.PodName = "" // Clear pod name for new pod
 				if err := r.Status().Update(ctx,job); err != nil{
-					return ctrl.Result{}, err
+					return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 				}
-				return ctrl.Result{RequeueAfter: 10*time.Second}, nil
+				return ctrl.Result{RequeueAfter: FastRequeueDelay}, nil
 			} else {
 				log.Info("Max retries exceeded, marking job as Failed")
 				job.Status.JobStatus = aerjobv2.Failed
@@ -303,7 +310,7 @@ func (r* QuantumAerJobReconciler) handleRunningJob(ctx context.Context, job *aer
 				now := metav1.Now()
 				job.Status.CompletionTime = &now
 				if err := r.Status().Update(ctx,job); err != nil{
-						return ctrl.Result{}, err
+						return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 					}
 				return ctrl.Result{RequeueAfter: 60*time.Second}, nil
 			}	
@@ -315,12 +322,12 @@ func (r* QuantumAerJobReconciler) handleRunningJob(ctx context.Context, job *aer
 			job.Status.JobStatus = aerjobv2.Completed
 
 			if err := r.Status().Update(ctx,job); err != nil{
-					return ctrl.Result{}, err
+					return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 				}
-			return ctrl.Result{RequeueAfter: 60*time.Second}, nil
+			return ctrl.Result{RequeueAfter: SlowRequeueDelay}, nil
 			
 		case v1.PodPending, v1.PodRunning :
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: FastRequeueDelay}, nil
 	}
 
 	return ctrl.Result{}, nil
@@ -335,20 +342,20 @@ func (r *QuantumAerJobReconciler) handleTerminalJob(ctx context.Context, job *ae
 		job.Status.JobStatus = aerjobv2.Pending
 		job.Status.PodName = "" // Clear pod name
 		if err := r.Status().Update(ctx, job); err != nil {
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 		}
 		log.Info("Transitioning back to Pending")
 		return ctrl.Result{Requeue: true}, nil
 	}
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 	}
 
 	if job.Status.JobStatus == aerjobv2.Completed || job.Status.JobStatus == aerjobv2.Failed {
 
 		log.Info("Job in terminal state, cleaning up the pods")
 		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
-			return ctrl.Result{}, err
+			return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 		}
 
 		// Deleting the CR if it exceeds TTL
@@ -368,10 +375,9 @@ func (r *QuantumAerJobReconciler) handleTerminalJob(ctx context.Context, job *ae
 						// Already deleted, nothing to do
 						return ctrl.Result{}, nil
 					}
-				log.Error(err, "Failed to delete QuantumJob CR")
-				return ctrl.Result{}, err
+					log.Error(err, "Failed to delete QuantumJob CR")
+					return ctrl.Result{RequeueAfter: DefaultRequeueDelay}, err
 				}
-			
 				log.Info("QuantumJob CR deleted successfully", "name", job.Name)
 				return ctrl.Result{}, nil
 			}
