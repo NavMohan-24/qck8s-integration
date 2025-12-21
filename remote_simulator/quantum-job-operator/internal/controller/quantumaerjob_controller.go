@@ -191,18 +191,18 @@ func (r* QuantumAerJobReconciler) getForPod(ctx context.Context, job *aerjobv2.Q
 	log := logf.FromContext(ctx)
 	// fetches pod using name
 	if job.Status.PodName != "" {
-		var pod v1.Pod
+		pod =  &v1.Pod{}
 		err := r.Get(ctx, types.NamespacedName{
 			Name:      job.Status.PodName,
 			Namespace: job.Namespace,
-		}, &pod)
+		}, pod)
 
 		if err != nil{
 			log.Info("Failed to fetch simulator pod", "podName",job.Status.PodName)
 			return nil, err
 		}
 		log.Info("Sucessfully fetched the simulator pod", "podName",job.Status.PodName)
-		return &pod, err
+		return pod, err
 	}
 
 	return nil, errors.NewNotFound(v1.Resource("pod"), "")
