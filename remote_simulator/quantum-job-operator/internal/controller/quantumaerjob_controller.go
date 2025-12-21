@@ -104,10 +104,30 @@ func (r *QuantumAerJobReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
+func (r *QuantumAerJobReconciler) validateServiceAccount(ctx context.Context, namespace, saName string) error {
+    sa := &v1.ServiceAccount{}
+    err := r.Get(ctx, types.NamespacedName{
+        Name:      saName,
+        Namespace: namespace,
+    }, sa)
+    
+    if errors.IsNotFound(err) {
+        return fmt.Errorf("ServiceAccount %s not found in namespace %s", saName, namespace)
+    }
+    return err
+}
+
 func (r* QuantumAerJobReconciler) createSimulatorPod(ctx context.Context, job *aerjobv2.QuantumAerJob) (error){
 	
 	log := logf.FromContext(ctx)
 	podName := fmt.Sprintf("%s-sim-%d-%d", job.Name, job.Status.Retries, time.Now().Unix())
+
+	// Validate ServiceAccount exists
+    if err := r.validateServiceAccount(ctx, job.Namespace, "quantum-simulator-sa"); err != nil {
+        log.Error(err, "ServiceAccount validation failed, pod couldn't be created")
+        return err
+    }
+
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
