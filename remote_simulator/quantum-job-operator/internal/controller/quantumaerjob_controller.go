@@ -120,7 +120,7 @@ func (r *QuantumAerJobReconciler) validateServiceAccount(ctx context.Context, na
 func (r* QuantumAerJobReconciler) createSimulatorPod(ctx context.Context, job *aerjobv2.QuantumAerJob) (error){
 	
 	log := logf.FromContext(ctx)
-	podName := fmt.Sprintf("%s-sim-%d-%d", job.Name, job.Status.Retries, time.Now().Unix())
+	podName := fmt.Sprintf("%s-sim-%d", job.Name, job.Status.Retries)
 
 	// Validate ServiceAccount exists
     if err := r.validateServiceAccount(ctx, job.Namespace, "quantum-simulator-sa"); err != nil {
@@ -176,36 +176,45 @@ func (r* QuantumAerJobReconciler) createSimulatorPod(ctx context.Context, job *a
 	}
 
 	log.Info("Creating simulator pod", "podName", podName)
-
-	if err:= r.Create(ctx, pod); err != nil{
-		log.Info("Failed to create simulator pod", "podName", podName)
-		return err
+	
+	err:= r.Create(ctx, pod);
+	if err != nil{
+		if errors.IsAlreadyExists(err){
+			log.Info("Pod already exists, skipping creation", "podName", podName)
+			// Do not exit if it is an already exists error.
+		}else{
+			log.Info("Failed to create simulator pod", "podName", podName)
+			return err
+		}
 	}
-
-	job.Status.PodName = podName
-	return  r.Status().Update(ctx, job)
+    
+	if job.Status.PodName != podName{
+		job.Status.PodName = podName
+		return  r.Status().Update(ctx, job)
+	}
+	return nil
 }
 
-func (r* QuantumAerJobReconciler) getForPod(ctx context.Context, job *aerjobv2.QuantumAerJob)(pod *v1.Pod, err error){
-
-	log := logf.FromContext(ctx)
-	// fetches pod using name
-	if job.Status.PodName != "" {
-		pod =  &v1.Pod{}
-		err := r.Get(ctx, types.NamespacedName{
-			Name:      job.Status.PodName,
-			Namespace: job.Namespace,
-		}, pod)
-
-		if err != nil{
-			log.Info("Failed to fetch simulator pod", "podName",job.Status.PodName)
-			return nil, err
-		}
-		log.Info("Sucessfully fetched the simulator pod", "podName",job.Status.PodName)
-		return pod, err
-	}
-
-	return nil, errors.NewNotFound(v1.Resource("pod"), "")
+func (r* QuantumAerJobReconciler) getForPod(ctx context.Context, job *aerjobv2.QuantumAerJob) (*v1.Pod, error) {
+    log := logf.FromContext(ctx)
+    
+    if job.Status.PodName == "" {
+        return nil, errors.NewNotFound(v1.Resource("pod"), "")
+    }
+    
+    pod := &v1.Pod{}
+    err := r.Get(ctx, types.NamespacedName{ 
+        Name:      job.Status.PodName,
+        Namespace: job.Namespace,
+    }, pod)
+    
+    if err != nil {
+        log.Info("Failed to fetch simulator pod", "podName", job.Status.PodName)
+        return nil, err
+    }
+    
+    log.Info("Successfully fetched the simulator pod", "podName", job.Status.PodName)
+    return pod, nil
 }
 
 func (r* QuantumAerJobReconciler) handleNewJob(ctx context.Context, job *aerjobv2.QuantumAerJob)(ctrl.Result, error){
