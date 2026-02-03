@@ -10,3 +10,17 @@ docker exec -it pg-lab psql -U postgres
 ```
 cat name_of_script.sql | docker exec -i pg-lab psql -U postgres
 ```
+***
+**Note**
+
+##### Checking environment variable
+
+- Connect to database interactively
+
+        docker exec -it pg-lab bash
+
+-  print environment variables
+
+        printenv
+
+***
