@@ -3,6 +3,7 @@ import os
 
 # set default environment variable
 os.environ.setdefault("SIMULATOR_SERVICE_URL", "http://aer-simulator-service:5001")
+os.environ.setdefault('TRANSPILER_SERVICE_URL', 'http://transpiler-service:5002')
 
 # function to execute the code
 def execute(code_string):
@@ -65,18 +66,3 @@ if __name__ == "__main__":
         code_string = f.read()
     
     execute(code_string)
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
